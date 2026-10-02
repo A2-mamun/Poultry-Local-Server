@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Poultry Coop Environment</title>
+
+    <link rel="icon" type="image/png" href="/favicon.png">
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+    <link
+        rel="icon"
+        type="image/png"
+        href="favicon.png"
+    >
+</head>
+
+<body>
+
+    <div class="container">
+
+        <header>
+
+            <h1>
+                Poultry Coop Environment
+            </h1>
+
+            <span
+                id="status-badge"
+                class="badge offline"
+            >
+                OFFLINE
+            </span>
+
+        </header>
+
+
+        <!-- Live Sensor Cards -->
+
+        <div class="grid">
+
+            <!-- Temperature -->
+
+            <div class="card">
+
+                <div class="icon">
+                    🌡️
+                </div>
+
+                <h3>
+                    Temperature
+                </h3>
+
+                <div
+                    class="value"
+                    id="val-temp"
+                >
+                    --
+                </div>
+
+                <div class="unit">
+                    °C
+                </div>
+
+            </div>
+
+
+            <!-- Humidity -->
+
+            <div class="card">
+
+                <div class="icon">
+                    💧
+                </div>
+
+                <h3>
+                    Humidity
+                </h3>
+
+                <div
+                    class="value"
+                    id="val-hum"
+                >
+                    --
+                </div>
+
+                <div class="unit">
+                    %
+                </div>
+
+            </div>
+
+
+            <!-- Gas -->
+
+            <div class="card">
+
+                <div class="icon">
+                    ☣️
+                </div>
+
+                <h3>
+                    Gas Level
+                </h3>
+
+                <div
+                    class="value"
+                    id="val-gas"
+                >
+                    --
+                </div>
+
+                <div class="unit">
+                    Raw Value
+                </div>
+
+            </div>
+
+
+            <!-- Feed -->
+
+            <div class="card">
+
+                <div class="icon">
+                    🌾
+                </div>
+
+                <h3>
+                    Feed Level
+                </h3>
+
+                <div
+                    class="value"
+                    id="val-feed"
+                >
+                    --
+                </div>
+
+                <div class="unit">
+                    %
+                </div>
+
+            </div>
+
+
+            <!-- Water -->
+
+            <div class="card">
+
+                <div class="icon">
+                    🚰
+                </div>
+
+                <h3>
+                    Water Level
+                </h3>
+
+                <div
+                    class="value"
+                    id="val-water"
+                >
+                    --
+                </div>
+
+                <div class="unit">
+                    %
+                </div>
+
+            </div>
+
+
+            <!-- Cooling Fan -->
+
+            <div class="card device-card">
+
+                <div class="icon">
+                    🌬️
+                </div>
+
+                <h3>
+                    Cooling Fan
+                </h3>
+
+                <div
+                    class="device-value device-on"
+                    id="val-fan"
+                >
+                    ON
+                </div>
+
+                <div class="unit">
+                    Always ON
+                </div>
+
+            </div>
+
+
+            <!-- Mist Generator -->
+
+            <div class="card device-card">
+
+                <div class="icon">
+                    💨
+                </div>
+
+                <h3>
+                    Mist Generator
+                </h3>
+
+                <div
+                    class="device-value device-off"
+                    id="val-mist"
+                >
+                    --
+                </div>
+
+                <div class="unit">
+                    Automatic
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- Last Update -->
+
+        <div
+            id="last-update"
+            class="last-update"
+        >
+            Waiting for data...
+        </div>
+
+
+        <!-- Historical Data -->
+
+        <section class="history-section">
+
+            <h2>
+                Historical Sensor Data
+            </h2>
+
+            <div class="chart-grid">
+
+                <div class="chart-card">
+                    <h3>Temperature</h3>
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Humidity</h3>
+                    <canvas id="humidityChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Gas Level</h3>
+                    <canvas id="gasChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Feed Level</h3>
+                    <canvas id="feedChart"></canvas>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Water Level</h3>
+                    <canvas id="waterChart"></canvas>
+                </div>
+
+            </div>
+
+        </section>
+
+    </div>
+
+
+    <script src="app.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,4 @@
+node_modules/
+poultry.db
+.env
+*.db
