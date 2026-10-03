@@ -130,293 +130,107 @@ async function updateDashboard() {
    SIMPLE CHART
 ========================================= */
 
-function drawChart(
-    canvasId,
-    data,
-    field,
-    unit
-) {
-
-    const canvas =
-        document.getElementById(
-            canvasId
-        );
-
-
+function drawChart(canvasId, data, field, unit) {
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
 
+    const ctx = canvas.getContext("2d");
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
 
-    const ctx =
-        canvas.getContext("2d");
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
 
-
-    const width =
-        canvas.clientWidth;
-
-    const height =
-        canvas.clientHeight;
-
-
-    const dpr =
-        window.devicePixelRatio || 1;
-
-
-    canvas.width =
-        width * dpr;
-
-    canvas.height =
-        height * dpr;
-
-
-    ctx.setTransform(
-        dpr,
-        0,
-        0,
-        dpr,
-        0,
-        0
-    );
-
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const left = 55;
     const right = 20;
     const top = 30;
     const bottom = 35;
 
+    const chartWidth = width - left - right;
+    const chartHeight = height - top - bottom;
 
-    const chartWidth =
-        width - left - right;
-
-    const chartHeight =
-        height - top - bottom;
-
-
-    const values =
-        data
-            .map(
-                item =>
-                    Number(item[field])
-            )
-            .filter(
-                value =>
-                    !isNaN(value)
-            );
-
+    const values = data
+        .map(item => Number(item[field]))
+        .filter(value => !isNaN(value));
 
     if (!values.length) return;
 
+    let min = Math.min(...values);
+    let max = Math.max(...values);
+    let range = max - min;
+    if (range === 0) range = 1;
 
-    let min =
-        Math.min(...values);
-
-    let max =
-        Math.max(...values);
-
-
-    let range =
-        max - min;
-
-
-    if (range === 0) {
-        range = 1;
-    }
-
-
-    const padding =
-        range * 0.2;
-
-
+    const padding = range * 0.2;
     min -= padding;
     max += padding;
 
-
-    ctx.clearRect(
-        0,
-        0,
-        width,
-        height
-    );
-
+    ctx.clearRect(0, 0, width, height);
 
     /* Grid */
-
-    ctx.strokeStyle =
-        "rgba(255,255,255,0.2)";
-
+    ctx.strokeStyle = "rgba(255,255,255,0.2)";
 
     for (let i = 0; i <= 4; i++) {
-
-        const y =
-            top +
-            chartHeight *
-            i / 4;
-
+        const y = top + (chartHeight * i) / 4;
 
         ctx.beginPath();
-
-        ctx.moveTo(
-            left,
-            y
-        );
-
-        ctx.lineTo(
-            width - right,
-            y
-        );
-
+        ctx.moveTo(left, y);
+        ctx.lineTo(width - right, y);
         ctx.stroke();
 
+        const value = max - ((max - min) * i) / 4;
 
-        const value =
-            max -
-            (max - min) *
-            i / 4;
-
-
-        ctx.fillStyle =
-            "#fff";
-
-        ctx.font =
-            "11px Arial";
-
-        ctx.textAlign =
-            "right";
-
-
+        ctx.fillStyle = "#fff";
+        ctx.font = "11px Arial";
+        ctx.textAlign = "right";
         ctx.fillText(
-            value.toFixed(
-                field === "temperature" ||
-                field === "humidity"
-                    ? 1
-                    : 0
-            ),
+            value.toFixed(field === "temperature" || field === "humidity" ? 1 : 0),
             left - 8,
             y + 4
         );
     }
 
-
     /* Line */
-
     ctx.beginPath();
 
+    data.forEach((item, index) => {
+        const value = Number(item[field]);
+        if (isNaN(value)) return;
 
-    data.forEach(
-        (item, index) => {
+        const x = left + (index / Math.max(data.length - 1, 1)) * chartWidth;
+        const y = height - bottom - ((value - min) / (max - min)) * chartHeight;
 
-            const value =
-                Number(item[field]);
-
-
-            if (isNaN(value)) return;
-
-
-            const x =
-                left +
-                index /
-                Math.max(
-                    data.length - 1,
-                    1
-                ) *
-                chartWidth;
-
-
-            const y =
-                height -
-                bottom -
-                (
-                    (value - min) /
-                    (max - min)
-                ) *
-                chartHeight;
-
-
-            if (index === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
+        if (index === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
         }
-    );
+    });
 
-
-    ctx.strokeStyle =
-        "#ffffff";
-
+    ctx.strokeStyle = "#ffffff";
     ctx.lineWidth = 2.5;
-
     ctx.stroke();
 
-    const time = new Date(
-    typeof item.timestamp === "string" 
-      ? item.timestamp.replace(" ", "T") 
-      : item.timestamp
-    ).getTime();
     /* Points */
+    data.forEach((item, index) => {
+        const value = Number(item[field]);
+        if (isNaN(value)) return;
 
-    data.forEach(
-        (item, index) => {
+        const x = left + (index / Math.max(data.length - 1, 1)) * chartWidth;
+        const y = height - bottom - ((value - min) / (max - min)) * chartHeight;
 
-            const value =
-                Number(item[field]);
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+    });
 
-
-            if (isNaN(value)) return;
-
-
-            const x =
-                left +
-                index /
-                Math.max(
-                    data.length - 1,
-                    1
-                ) *
-                chartWidth;
-
-
-            const y =
-                height -
-                bottom -
-                (
-                    (value - min) /
-                    (max - min)
-                ) *
-                chartHeight;
-
-
-            ctx.beginPath();
-
-            ctx.arc(
-                x,
-                y,
-                3,
-                0,
-                Math.PI * 2
-            );
-
-
-            ctx.fillStyle =
-                "#ffffff";
-
-            ctx.fill();
-        }
-    );
-
-
-    ctx.fillStyle =
-        "#ffffff";
-
-    ctx.font =
-        "12px Arial";
-
-    ctx.textAlign =
-        "left";
-
-    ctx.fillText(
-        unit,
-        left,
-        18
-    );
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "12px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(unit, left, 18);
 }
 
 
