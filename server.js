@@ -23,6 +23,7 @@ const pool = new Pool({
 });
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 /* =========================================
    DATABASE INITIALIZATION
@@ -367,7 +368,15 @@ app.get("/api/sensor-data/latest", authenticate, async (req, res) => {
     }
 
     const result = await pool.query(query, params);
-    res.json(result.rows[0] || null);
+    const latest = result.rows[0] || null;
+
+    if (latest) {
+      const timestamp = new Date(latest.timestamp).getTime();
+      // Extended online threshold to 60 seconds
+      latest.online = Date.now() - timestamp <= 60000;
+    }
+
+    res.json(latest);
   } catch (err) {
     console.error("Error fetching latest sensor data:", err);
     res.status(500).json({ error: "Failed to fetch sensor data" });
@@ -435,7 +444,8 @@ app.get("/api/boss/overview", authenticate, async (req, res) => {
 
         if (latest) {
           const timestamp = new Date(latest.timestamp).getTime();
-          online = Date.now() - timestamp <= 15000;
+          // Extended online threshold to 60 seconds
+          online = Date.now() - timestamp <= 60000;
         }
 
         return {
@@ -470,6 +480,40 @@ app.get("/api/boss/overview", authenticate, async (req, res) => {
   }
 });
 
+app.get("/api/boss/coop/:id", authenticate, async (req, res) => {
+  if (req.user.role !== "boss") {
+    return res.status(403).json({ error: "Boss access required" });
+  }
+
+  const coopId = Number(req.params.id);
+
+  try {
+    const coopRes = await pool.query(`SELECT * FROM coops WHERE id = $1`, [coopId]);
+    if (coopRes.rowCount === 0) {
+      return res.status(404).json({ error: "Coop not found" });
+    }
+
+    const managerRes = await pool.query(
+      `SELECT id, username FROM users WHERE role = 'manager' AND coop_id = $1`,
+      [coopId]
+    );
+
+    const historyRes = await pool.query(
+      `SELECT * FROM sensor_data WHERE coop_id = $1 ORDER BY id DESC LIMIT 10000`,
+      [coopId]
+    );
+
+    res.json({
+      coop: coopRes.rows[0],
+      manager: managerRes.rows[0] || null,
+      history: historyRes.rows
+    });
+  } catch (error) {
+    console.error("Error fetching boss coop detail:", error);
+    res.status(500).json({ error: "Failed to fetch coop detail" });
+  }
+});
+
 app.get("/api/boss/history", authenticate, async (req, res) => {
   if (req.user.role !== "boss") {
     return res.status(403).json({ error: "Boss access required" });
@@ -484,14 +528,23 @@ app.get("/api/boss/history", authenticate, async (req, res) => {
   const conditions = [];
   const params = [];
 
-  if (coopId && coopId !== "all") {
-    params.push(Number(coopId));
-    conditions.push(`sensor_data.coop_id = $${params.length}`);
+  if (coopId && coopId !== "all" && coopId !== "ALL") {
+    const parsedId = Number(coopId);
+    if (!isNaN(parsedId)) {
+      params.push(parsedId);
+      conditions.push(`sensor_data.coop_id = $${params.length}`);
+    } else {
+      params.push(coopId);
+      conditions.push(`coops.coop_name = $${params.length}`);
+    }
   }
 
   if (date) {
     params.push(date);
-    conditions.push(`DATE(sensor_data.timestamp) = $${params.length}`);
+    conditions.push(`
+      sensor_data.timestamp >= $${params.length}::date 
+      AND sensor_data.timestamp < ($${params.length}::date + INTERVAL '1 day')
+    `);
   }
 
   if (conditions.length > 0) {
@@ -502,7 +555,12 @@ app.get("/api/boss/history", authenticate, async (req, res) => {
 
   try {
     const result = await pool.query(query, params);
-    res.json(result.rows);
+    res.json({
+      success: true,
+      records: result.rows,
+      total: result.rowCount,
+      returned: result.rowCount
+    });
   } catch (error) {
     console.error("Error fetching boss history:", error);
     res.status(500).json({ error: "Failed to fetch historical data" });
