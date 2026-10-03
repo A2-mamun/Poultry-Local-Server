@@ -547,7 +547,8 @@ app.get("/api/boss/history", authenticate, async (req, res) => {
   if (date) {
     params.push(date);
     conditions.push(`
-      (sensor_data.timestamp AT TIME ZONE 'Asia/Dhaka')::date = $${params.length}::date
+      sensor_data.timestamp >= TO_DATE($${params.length}, 'YYYY-MM-DD')
+      AND sensor_data.timestamp < TO_DATE($${params.length}, 'YYYY-MM-DD') + INTERVAL '1 day'
     `);
   }
 
