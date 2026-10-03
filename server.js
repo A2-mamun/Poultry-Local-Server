@@ -352,7 +352,8 @@ app.get("/api/sensor-data/latest", authenticate, async (req, res) => {
 
     if (req.user.role === "manager") {
       query = `
-        SELECT sensor_data.*, coops.coop_name
+        SELECT sensor_data.*, coops.coop_name,
+               EXTRACT(EPOCH FROM sensor_data.timestamp) * 1000 AS epoch_ms
         FROM sensor_data
         JOIN coops ON coops.id = sensor_data.coop_id
         WHERE sensor_data.coop_id = $1
@@ -360,7 +361,8 @@ app.get("/api/sensor-data/latest", authenticate, async (req, res) => {
       params = [req.user.coop_id];
     } else {
       query = `
-        SELECT sensor_data.*, coops.coop_name
+        SELECT sensor_data.*, coops.coop_name,
+               EXTRACT(EPOCH FROM sensor_data.timestamp) * 1000 AS epoch_ms
         FROM sensor_data
         JOIN coops ON coops.id = sensor_data.coop_id
         ORDER BY sensor_data.id DESC LIMIT 1`;
@@ -371,9 +373,10 @@ app.get("/api/sensor-data/latest", authenticate, async (req, res) => {
     const latest = result.rows[0] || null;
 
     if (latest) {
-      const timestamp = new Date(latest.timestamp).getTime();
-      // Extended online threshold to 60 seconds
-      latest.online = Date.now() - timestamp <= 60000;
+      const dbMs = Number(latest.epoch_ms);
+      const diffSeconds = (Date.now() - dbMs) / 1000;
+      // 120-second timeout window
+      latest.online = diffSeconds <= 120;
     }
 
     res.json(latest);
@@ -430,7 +433,8 @@ app.get("/api/boss/overview", authenticate, async (req, res) => {
         const latestRes = await pool.query(
           `SELECT
               sensor_data.*,
-              users.username AS manager_name
+              users.username AS manager_name,
+              EXTRACT(EPOCH FROM sensor_data.timestamp) * 1000 AS epoch_ms
            FROM sensor_data
            JOIN coops ON coops.id = sensor_data.coop_id
            LEFT JOIN users ON users.coop_id = coops.id AND users.role = 'manager'
@@ -443,9 +447,10 @@ app.get("/api/boss/overview", authenticate, async (req, res) => {
         let online = false;
 
         if (latest) {
-          const timestamp = new Date(latest.timestamp).getTime();
-          // Extended online threshold to 60 seconds
-          online = Date.now() - timestamp <= 60000;
+          const dbMs = Number(latest.epoch_ms);
+          const diffSeconds = (Date.now() - dbMs) / 1000;
+          // 120-second timeout window
+          online = diffSeconds <= 120;
         }
 
         return {
