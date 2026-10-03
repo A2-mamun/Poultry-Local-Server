@@ -346,27 +346,32 @@ app.post("/api/sensor-data", async (req, res) => {
 ========================================= */
 
 app.get("/api/sensor-data/latest", authenticate, async (req, res) => {
-  let query, params;
+  try {
+    let query, params;
 
-  if (req.user.role === "manager") {
-    query = `
-      SELECT sensor_data.*, coops.coop_name
-      FROM sensor_data
-      JOIN coops ON coops.id = sensor_data.coop_id
-      WHERE sensor_data.coop_id = $1
-      ORDER BY sensor_data.id DESC LIMIT 1`;
-    params = [req.user.coop_id];
-  } else {
-    query = `
-      SELECT sensor_data.*, coops.coop_name
-      FROM sensor_data
-      JOIN coops ON coops.id = sensor_data.coop_id
-      ORDER BY sensor_data.id DESC LIMIT 1`;
-    params = [];
+    if (req.user.role === "manager") {
+      query = `
+        SELECT sensor_data.*, coops.coop_name
+        FROM sensor_data
+        JOIN coops ON coops.id = sensor_data.coop_id
+        WHERE sensor_data.coop_id = $1
+        ORDER BY sensor_data.id DESC LIMIT 1`;
+      params = [req.user.coop_id];
+    } else {
+      query = `
+        SELECT sensor_data.*, coops.coop_name
+        FROM sensor_data
+        JOIN coops ON coops.id = sensor_data.coop_id
+        ORDER BY sensor_data.id DESC LIMIT 1`;
+      params = [];
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows[0] || null);
+  } catch (err) {
+    console.error("Error fetching latest sensor data:", err);
+    res.status(500).json({ error: "Failed to fetch sensor data" });
   }
-
-  const result = await pool.query(query, params);
-  res.json(result.rows[0] || null);
 });
 
 app.get("/api/manager/history", authenticate, async (req, res) => {
@@ -374,12 +379,32 @@ app.get("/api/manager/history", authenticate, async (req, res) => {
     return res.status(403).json({ error: "Manager access required" });
   }
 
-  const result = await pool.query(
-    `SELECT * FROM sensor_data WHERE coop_id = $1 ORDER BY id DESC LIMIT 10000`,
-    [req.user.coop_id]
-  );
+  const hours = Number(req.query.hours) || 24;
 
-  res.json(result.rows);
+  try {
+    const result = await pool.query(
+      `SELECT 
+        id,
+        coop_id,
+        temperature,
+        humidity,
+        gas,
+        feed,
+        water,
+        mist_generator,
+        timestamp
+       FROM sensor_data 
+       WHERE coop_id = $1 
+         AND timestamp >= NOW() - ($2 || ' hours')::INTERVAL 
+       ORDER BY timestamp ASC`,
+      [req.user.coop_id, hours]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching manager history:", error);
+    res.status(500).json({ error: "Failed to fetch historical data" });
+  }
 });
 
 app.get("/api/boss/overview", authenticate, async (req, res) => {
@@ -387,57 +412,101 @@ app.get("/api/boss/overview", authenticate, async (req, res) => {
     return res.status(403).json({ error: "Boss access required" });
   }
 
-  const coopsRes = await pool.query(`SELECT id, coop_name FROM coops ORDER BY id`);
-  const coops = coopsRes.rows;
+  try {
+    const coopsRes = await pool.query(`SELECT id, coop_name FROM coops ORDER BY id`);
+    const coops = coopsRes.rows;
 
-  const results = await Promise.all(
-    coops.map(async (coop) => {
-      const latestRes = await pool.query(
-        `SELECT
-            sensor_data.*,
-            users.username AS manager_name
-         FROM sensor_data
-         JOIN coops ON coops.id = sensor_data.coop_id
-         LEFT JOIN users ON users.coop_id = coops.id AND users.role = 'manager'
-         WHERE sensor_data.coop_id = $1
-         ORDER BY sensor_data.id DESC LIMIT 1`,
-        [coop.id]
-      );
+    const results = await Promise.all(
+      coops.map(async (coop) => {
+        const latestRes = await pool.query(
+          `SELECT
+              sensor_data.*,
+              users.username AS manager_name
+           FROM sensor_data
+           JOIN coops ON coops.id = sensor_data.coop_id
+           LEFT JOIN users ON users.coop_id = coops.id AND users.role = 'manager'
+           WHERE sensor_data.coop_id = $1
+           ORDER BY sensor_data.id DESC LIMIT 1`,
+          [coop.id]
+        );
 
-      const latest = latestRes.rows[0] || null;
-      let online = false;
+        const latest = latestRes.rows[0] || null;
+        let online = false;
 
-      if (latest) {
-        const timestamp = new Date(latest.timestamp).getTime();
-        online = Date.now() - timestamp <= 15000;
-      }
+        if (latest) {
+          const timestamp = new Date(latest.timestamp).getTime();
+          online = Date.now() - timestamp <= 15000;
+        }
 
-      return {
-        coop: coop,
-        manager: latest ? latest.manager_name : "Not available",
-        online: online,
-        data: latest
-      };
-    })
-  );
+        return {
+          coop: coop,
+          manager: latest ? latest.manager_name : "Not available",
+          online: online,
+          data: latest
+        };
+      })
+    );
 
-  const active = results.filter((item) => item.data);
+    const active = results.filter((item) => item.data);
 
-  const average = {
-    temperature: active.length ? active.reduce((s, i) => s + Number(i.data.temperature), 0) / active.length : null,
-    humidity: active.length ? active.reduce((s, i) => s + Number(i.data.humidity), 0) / active.length : null,
-    gas: active.length ? active.reduce((s, i) => s + Number(i.data.gas), 0) / active.length : null,
-    feed: active.length ? active.reduce((s, i) => s + Number(i.data.feed), 0) / active.length : null,
-    water: active.length ? active.reduce((s, i) => s + Number(i.data.water), 0) / active.length : null
-  };
+    const average = {
+      temperature: active.length ? active.reduce((s, i) => s + Number(i.data.temperature), 0) / active.length : null,
+      humidity: active.length ? active.reduce((s, i) => s + Number(i.data.humidity), 0) / active.length : null,
+      gas: active.length ? active.reduce((s, i) => s + Number(i.data.gas), 0) / active.length : null,
+      feed: active.length ? active.reduce((s, i) => s + Number(i.data.feed), 0) / active.length : null,
+      water: active.length ? active.reduce((s, i) => s + Number(i.data.water), 0) / active.length : null
+    };
 
-  res.json({
-    totalCoops: results.length,
-    onlineCoops: results.filter((item) => item.online).length,
-    offlineCoops: results.filter((item) => !item.online).length,
-    average: average,
-    coops: results
-  });
+    res.json({
+      totalCoops: results.length,
+      onlineCoops: results.filter((item) => item.online).length,
+      offlineCoops: results.filter((item) => !item.online).length,
+      average: average,
+      coops: results
+    });
+  } catch (error) {
+    console.error("Error fetching boss overview:", error);
+    res.status(500).json({ error: "Failed to fetch boss overview" });
+  }
+});
+
+app.get("/api/boss/history", authenticate, async (req, res) => {
+  if (req.user.role !== "boss") {
+    return res.status(403).json({ error: "Boss access required" });
+  }
+
+  const { coopId, date } = req.query;
+  let query = `
+    SELECT sensor_data.*, coops.coop_name
+    FROM sensor_data
+    JOIN coops ON coops.id = sensor_data.coop_id
+  `;
+  const conditions = [];
+  const params = [];
+
+  if (coopId && coopId !== "all") {
+    params.push(Number(coopId));
+    conditions.push(`sensor_data.coop_id = $${params.length}`);
+  }
+
+  if (date) {
+    params.push(date);
+    conditions.push(`DATE(sensor_data.timestamp) = $${params.length}`);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ` + conditions.join(" AND ");
+  }
+
+  query += ` ORDER BY sensor_data.id DESC LIMIT 10000`;
+
+  try {
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching boss history:", error);
+    res.status(500).json({ error: "Failed to fetch historical data" });
+  }
 });
 
 /* =========================================
