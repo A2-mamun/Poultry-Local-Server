@@ -83,124 +83,44 @@ async function getHistory() {
 ========================================= */
 
 async function updateDashboard() {
-
     try {
+        const data = await getLatest();
+        if (!data) return;
 
-        const data =
-            await getLatest();
+        document.getElementById("val-temp").innerText = Number(data.temperature).toFixed(1);
+        document.getElementById("val-hum").innerText = Number(data.humidity).toFixed(1);
+        document.getElementById("val-gas").innerText = Math.round(Number(data.gas));
+        document.getElementById("val-feed").innerText = Math.round(Number(data.feed));
+        document.getElementById("val-water").innerText = Math.round(Number(data.water));
 
+        const isMistOn = Number(data.mist_generator) === 1;
+        const mistElem = document.getElementById("val-mist");
+        mistElem.innerText = isMistOn ? "ON" : "OFF";
+        mistElem.className = isMistOn ? "device-value device-on" : "device-value device-off";
 
-        if (!data) {
-            return;
-        }
+        // Parse date properly at the top of the function
+        const rawTimestamp = typeof data.timestamp === "string" 
+            ? data.timestamp.replace(" ", "T") 
+            : data.timestamp;
+        const timestamp = new Date(rawTimestamp);
 
+        // Alternatively, use backend epoch calculation:
+        // const age = Date.now() - Number(data.epoch_ms);
+        const age = Date.now() - timestamp.getTime();
 
-        document.getElementById(
-            "val-temp"
-        ).innerText =
-            Number(
-                data.temperature
-            ).toFixed(1);
-
-
-        document.getElementById(
-            "val-hum"
-        ).innerText =
-            Number(
-                data.humidity
-            ).toFixed(1);
-
-
-        document.getElementById(
-            "val-gas"
-        ).innerText =
-            Math.round(
-                Number(data.gas)
-            );
-
-
-        document.getElementById(
-            "val-feed"
-        ).innerText =
-            Math.round(
-                Number(data.feed)
-            );
-
-
-        document.getElementById(
-            "val-water"
-        ).innerText =
-            Math.round(
-                Number(data.water)
-            );
-
-
-        document.getElementById(
-            "val-mist"
-        ).innerText =
-            Number(
-                data.mist_generator
-            ) === 1
-                ? "ON"
-                : "OFF";
-
-
-        document.getElementById(
-            "val-mist"
-        ).className =
-            Number(
-                data.mist_generator
-            ) === 1
-                ? "device-value device-on"
-                : "device-value device-off";
-
-
-        const timestamp =
-            new Date(
-                data.timestamp
-                    .replace(" ", "T") +
-                "Z"
-            );
-
-
-        const age =
-            Date.now() -
-            timestamp.getTime();
-
-
-        const badge =
-            document.getElementById(
-                "status-badge"
-            );
-
-
-        if (age <= 15000) {
-
-            badge.innerText =
-                "ONLINE";
-
-            badge.className =
-                "badge online";
-
+        const badge = document.getElementById("status-badge");
+        if (!isNaN(age) && age <= 120000) { // 120 sec match backend timeout window
+            badge.innerText = "ONLINE";
+            badge.className = "badge online";
         } else {
-
-            badge.innerText =
-                "OFFLINE";
-
-            badge.className =
-                "badge offline";
+            badge.innerText = "OFFLINE";
+            badge.className = "badge offline";
         }
 
-
-        document.getElementById(
-            "last-update"
-        ).innerText =
-            "Last update: " +
-            timestamp.toLocaleString();
-
+        document.getElementById("last-update").innerText =
+            "Last update: " + (isNaN(timestamp.getTime()) ? "N/A" : timestamp.toLocaleString());
 
     } catch (error) {
-
         console.error(error);
     }
 }
@@ -427,7 +347,11 @@ function drawChart(
 
     ctx.stroke();
 
-
+    const time = new Date(
+    typeof item.timestamp === "string" 
+      ? item.timestamp.replace(" ", "T") 
+      : item.timestamp
+    ).getTime();
     /* Points */
 
     data.forEach(
@@ -501,97 +425,34 @@ function drawChart(
 ========================================= */
 
 async function updateCharts() {
-
     try {
+        const data = await getHistory();
+        if (!data || !data.length) return;
 
-        const data =
-            await getHistory();
+        const cutoff = Date.now() - historyRange * 60 * 60 * 1000;
 
+        const filtered = [...data]
+            .reverse()
+            .filter(item => {
+                const rawTime = typeof item.timestamp === "string"
+                    ? item.timestamp.replace(" ", "T")
+                    : item.timestamp;
+                const time = new Date(rawTime).getTime();
+                return time >= cutoff;
+            });
 
-        if (!data.length) {
-            return;
-        }
+        const history = filtered.length > 0 ? filtered : [...data].reverse();
 
-
-        const cutoff =
-            Date.now() -
-            historyRange *
-            60 *
-            60 *
-            1000;
-
-
-        const filtered =
-            [...data]
-                .reverse()
-                .filter(item => {
-
-                    const time =
-                        new Date(
-                            item.timestamp
-                                .replace(
-                                    " ",
-                                    "T"
-                                ) +
-                            "Z"
-                        ).getTime();
-
-                    return time >= cutoff;
-                });
-
-
-        const history =
-            filtered.length > 1
-                ? filtered
-                : [...data].reverse();
-
-
-        drawChart(
-            "temperatureChart",
-            history,
-            "temperature",
-            "°C"
-        );
-
-
-        drawChart(
-            "humidityChart",
-            history,
-            "humidity",
-            "%"
-        );
-
-
-        drawChart(
-            "gasChart",
-            history,
-            "gas",
-            "Raw"
-        );
-
-
-        drawChart(
-            "feedChart",
-            history,
-            "feed",
-            "%"
-        );
-
-
-        drawChart(
-            "waterChart",
-            history,
-            "water",
-            "%"
-        );
-
+        drawChart("temperatureChart", history, "temperature", "°C");
+        drawChart("humidityChart", history, "humidity", "%");
+        drawChart("gasChart", history, "gas", "Raw");
+        drawChart("feedChart", history, "feed", "%");
+        drawChart("waterChart", history, "water", "%");
 
     } catch (error) {
-
         console.error(error);
     }
 }
-
 
 /* =========================================
    RANGE SELECTOR
