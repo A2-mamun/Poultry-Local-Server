@@ -10,8 +10,13 @@ const PORT = process.env.PORT || 3000;
    DATABASE CONNECTION (NEON POSTGRESQL)
 ========================================= */
 
+const dbUrl = process.env.DATABASE_URL || "";
+const connectionString = dbUrl.includes("sslmode=")
+  ? dbUrl
+  : `${dbUrl}${dbUrl.includes("?") ? "&" : "?"}sslmode=require`;
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL + "?sslmode=verify-full",
+  connectionString,
   ssl: {
     rejectUnauthorized: false
   }
@@ -176,31 +181,35 @@ async function authenticate(req, res, next) {
     return res.status(401).json({ error: "Not logged in" });
   }
 
-  const result = await pool.query(
-    `SELECT
-        sessions.token,
-        sessions.expires_at,
-        users.id,
-        users.username,
-        users.role,
-        users.coop_id
-     FROM sessions
-     JOIN users ON users.id = sessions.user_id
-     WHERE sessions.token = $1`,
-    [token]
-  );
+  try {
+    const result = await pool.query(
+      `SELECT
+          sessions.token,
+          sessions.expires_at,
+          users.id,
+          users.username,
+          users.role,
+          users.coop_id
+       FROM sessions
+       JOIN users ON users.id = sessions.user_id
+       WHERE sessions.token = $1`,
+      [token]
+    );
 
-  const session = result.rows[0];
+    const session = result.rows[0];
 
-  if (!session || Number(session.expires_at) < Date.now()) {
-    if (token) {
-      await pool.query(`DELETE FROM sessions WHERE token = $1`, [token]);
+    if (!session || Number(session.expires_at) < Date.now()) {
+      if (token) {
+        await pool.query(`DELETE FROM sessions WHERE token = $1`, [token]);
+      }
+      return res.status(401).json({ error: "Session expired" });
     }
-    return res.status(401).json({ error: "Session expired" });
-  }
 
-  req.user = session;
-  next();
+    req.user = session;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Authentication error" });
+  }
 }
 
 /* =========================================
@@ -432,28 +441,36 @@ app.get("/api/boss/overview", authenticate, async (req, res) => {
 });
 
 /* =========================================
-   STATIC FRONTEND & ROUTING
+   PAGE ROUTING (BEFORE STATIC MIDDLEWARE)
 ========================================= */
-
-app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", async (req, res) => {
   const token = getCookie(req, "session_token");
   if (!token) return res.redirect("/login.html");
 
-  const result = await pool.query(
-    `SELECT sessions.expires_at, users.role FROM sessions 
-     JOIN users ON users.id = sessions.user_id WHERE sessions.token = $1`,
-    [token]
-  );
-  const session = result.rows[0];
+  try {
+    const result = await pool.query(
+      `SELECT sessions.expires_at, users.role FROM sessions 
+       JOIN users ON users.id = sessions.user_id WHERE sessions.token = $1`,
+      [token]
+    );
+    const session = result.rows[0];
 
-  if (!session || Number(session.expires_at) < Date.now()) {
+    if (!session || Number(session.expires_at) < Date.now()) {
+      return res.redirect("/login.html");
+    }
+
+    return res.redirect(session.role === "boss" ? "/boss.html" : "/manager.html");
+  } catch (err) {
     return res.redirect("/login.html");
   }
-
-  return res.redirect(session.role === "boss" ? "/boss.html" : "/manager.html");
 });
+
+/* =========================================
+   STATIC FRONTEND
+========================================= */
+
+app.use(express.static(path.join(__dirname, "public")));
 
 /* =========================================
    START SERVER

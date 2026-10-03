@@ -2,3 +2,5 @@ node_modules/
 poultry.db
 .env
 *.db
+.neon
+.env.local
